@@ -50,13 +50,9 @@ if __name__=="__main__":
 	test_dataset = dataset["test"]
 	print("Dataset train, test sizes:", len(train_dataset), len(test_dataset))
 
-	model = LlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
-	#model.offload_layers_to_cpu(layers_num=1) #model.num_hidden_layers - g.trainable_layers_num
 	data_collator = myDataCollator()
-	#model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)
-
 	trainer = SFTTrainer(
-		model,
+		model_dir,
 		device="cuda:0",
 		samples_per_step=50,
 		batch_size=2,

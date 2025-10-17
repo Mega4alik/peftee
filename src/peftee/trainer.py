@@ -25,12 +25,15 @@ class Global:
 
 
 class SFTTrainer:
-	def __init__(self, model, device="cuda:0", epochs=1, samples_per_step=10, batch_size=2, data_collator=None, train_dataset=None, eval_dataset=None):
+	def __init__(self, model_dir, device="cuda:0", epochs=1, samples_per_step=10, batch_size=2, data_collator=None, train_dataset=None, eval_dataset=None):
 		assert all(x is not None for x in [model, data_collator, train_dataset, samples_per_step, batch_size]), "can not be None"
 		device = torch.device("cuda:0")
 		g = Global(device, sps=samples_per_step, bs=batch_size)
 		g.loader = SingleDenseWeightsLoader(model_dir, device=device)
-		llama.g = g		
+		llama.g = g
+		model = LlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
+		#model.offload_layers_to_cpu(layers_num=1) #model.num_hidden_layers - g.trainable_layers_num
+		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)		
 		
 		# gradient checkpointing
 		model.gradient_checkpointing_enable()
