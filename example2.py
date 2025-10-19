@@ -63,7 +63,7 @@ if __name__=="__main__":
 			train_dataset=train_dataset,
 			eval_dataset=test_dataset
 		)
-		trainer.train("./model_temp/checkpoint-20")
+		trainer.train()
 
 	elif mode==3: # test
 		# pip install git+https://github.com/Mega4alik/ollm/PeftInference

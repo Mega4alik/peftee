@@ -1,7 +1,7 @@
 # asr3.12 venv
 # peftee trainer
 
-import json, os, random, time
+import json, os, random, time, math
 import datetime
 from torch.utils.data import DataLoader, Dataset
 from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup, AutoModel, AutoTokenizer, AutoModelForCausalLM
@@ -77,8 +77,8 @@ class SFTTrainer:
 		model, g = self.model, self.g
 		if resume_from_checkpoint: model.load_adapter(resume_from_checkpoint, adapter_name="default")
 		test_loader = DataLoader(self.test_ds, batch_size=g.sps, shuffle=True) if self.test_ds else None
-		train_len = len(self.train_ds)		
-		total_batch_steps, verbose_step = int((train_len / g.batch_size) * self.epochs), 1
+		train_len = len(self.train_ds)
+		total_batch_steps, verbose_step = math.ceil(train_len / g.batch_size) * self.epochs, 1
 		g.optimizer = AdamW(model.parameters(), lr = 2e-4, eps = 1e-8)
 		#g.optimizer = CPUOffloadOptimizer(model.parameters(), torch.optim.AdamW, offload_gradients=True, fused=True)
 		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = 0, num_training_steps = total_batch_steps)
@@ -88,10 +88,10 @@ class SFTTrainer:
 			print('======== Epoch {:} / {:} ========'.format(epoch_i, self.epochs), flush=True)
 			t0 = time.time()
 			model.train()
-			train_loader = DataLoader(self.train_ds, batch_size=g.sps, shuffle=True)
+			train_loader = DataLoader(self.train_ds, batch_size=g.sps, shuffle=True, num_workers=4, prefetch_factor=2)
 			total_loss = 0
 			for batch in train_loader:
-				step+=1				
+				step+=1
 				x = self.data_collator.__call__(batch)
 				if mode==2: #normal training
 					loss = model(input_ids=x["input_ids"].to(g.device), attention_mask=x["attention_mask"].to(g.device), labels=x["labels"].to(g.device)).loss
@@ -103,7 +103,7 @@ class SFTTrainer:
 				else:
 					loss = model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])					
 					if step % verbose_step == 0:
-						print('\tStep {:>5,}  of  {:>5,}.'.format(step, int(train_len / g.sps * self.epochs)), "loss:", loss)
+						print('\tStep {:>5,}  of  {:>5,}.'.format(step, math.ceil(train_len / g.sps) * self.epochs), "loss:", loss)
 					total_loss += loss
 				
 				#del batch, x			
@@ -117,10 +117,9 @@ class SFTTrainer:
 				if step % self.save_steps==0:
 					model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
 					print("\tCheckpoint saved.")
-
-			avg_train_loss = total_loss / (train_len / g.sps)
+			
 			print("\tTraining epoch took: {:}".format(time.time() - t0))
-			print("\tAverage training loss: {0:.7f}".format(avg_train_loss))
+			print("\tAverage training loss: {0:.7f}".format(total_loss / math.ceil(train_len / g.sps)))
 
 
 	@torch.no_grad
