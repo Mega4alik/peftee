@@ -38,7 +38,7 @@ if __name__=="__main__":
 
 	dataset = load_dataset("paraloq/json_data_extraction")
 	dataset = dataset.map(preprocess, batched=False)
-	dataset = dataset.filter(lambda x: len(x["prompt"]) + len(x["completion"]) < 1000*5)
+	dataset = dataset.filter(lambda x: len(x["prompt"]) + len(x["completion"]) < 1500*5)
 	dataset = dataset["train"].train_test_split(test_size=0.06)
 	train_dataset = dataset["train"]
 	test_dataset = dataset["test"]
@@ -50,16 +50,17 @@ if __name__=="__main__":
 		output_dir="./model_temp/",		
 		device="cuda:0",
 		trainable_layers_num=4,
-		epochs=2,
+		epochs=3,
 		samples_per_step=50,
 		batch_size=1,
-		save_steps=4,
-		eval_steps=2,
+		gradient_accumulation_batch_steps=2,
+		eval_steps=10,
+		save_steps=10,
 		data_collator=data_collator,
 		train_dataset=train_dataset,
 		eval_dataset=test_dataset
 	)
 
-	trainer.train()
+	trainer.train("./model_temp/checkpoint-20")
 
 	

@@ -129,9 +129,9 @@ class MyLlamaModel(LlamaModel):
 		if 1==1: #with autocast(dtype=torch.bfloat16):
 			del input_ids, attention_mask
 			self.parent_lm_head.to(device)
-			total_loss = 0
-
+			total_loss, bstep = 0, 0
 			for left in range(0, hidden_states.shape[0], bs):
+				bstep+=1
 				b_hidden_states = hidden_states[left:left+bs].to(device)
 				b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask is not None else None
 				b_labels = labels[left:left+bs].to(device)
@@ -153,16 +153,18 @@ class MyLlamaModel(LlamaModel):
 				#total_loss += chunked_cross_entropy_loss(logits, b_labels) #backward chunk by chunk				
 				loss = self.loss_function(logits=logits, labels=b_labels, vocab_size=self.vocab_size, **kwargs)
 				total_loss += loss.item()
-				if not is_eval:
+				if self.training:
 					loss.backward()
 					#torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) #optional
-					g.optimizer.step()
-					g.scheduler.step()
-					g.optimizer.zero_grad()
+					if not g.gabs or bstep % g.gabs==0:
+						g.optimizer.step()
+						g.scheduler.step()
+						g.optimizer.zero_grad()						
 				del logits, b_labels #, loss
 
+		g.optimizer.zero_grad()
 		self.embed_tokens.to(device)
-		return total_loss		
+		return total_loss
 		
 
 # Monkey-patch

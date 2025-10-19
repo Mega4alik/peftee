@@ -18,21 +18,22 @@ from .gds_loader import SingleDenseWeightsLoader, DenseWeightsLoader
 mode = 1 #1-peftee, 2-normal training
 
 class Global:
-	def __init__(self, device, trainable_layers_num=4, sps=4, bs=2):
+	def __init__(self, device, trainable_layers_num=4, sps=4, bs=2, gabs=None):
 		self.device = device
 		self.loader, self.stats, self.optimizer, self.scheduler = None, None, None, None
-		self.trainable_layers_num, self.sps, self.batch_size = trainable_layers_num, sps, bs
+		self.trainable_layers_num, self.sps, self.batch_size, self.gabs = trainable_layers_num, sps, bs, gabs
+
 
 class SFTTrainer:
 	def __init__(self,
 		model_dir, output_dir="./model_temp/",
 		device="cuda:0",
 		trainable_layers_num=4, epochs=1, samples_per_step=10, batch_size=2,
-		save_steps=2, eval_steps=2,
+		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None,
 		data_collator=None, train_dataset=None, eval_dataset=None):
 		assert all(x is not None for x in [model_dir, data_collator, samples_per_step, batch_size]), "can not be None"
 		device = torch.device(device)
-		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size)
+		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
 		g.loader = SingleDenseWeightsLoader(model_dir, device=device)
 		llama.g = g
 		model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
