@@ -18,22 +18,26 @@ from .gds_loader import SingleDenseWeightsLoader, DenseWeightsLoader
 mode = 1 #1-peftee, 2-normal training
 
 class Global:
-	def __init__(self, device, sps=4, bs=2):
+	def __init__(self, device, trainable_layers_num=4, sps=4, bs=2):
 		self.device = device
 		self.loader, self.stats, self.optimizer, self.scheduler = None, None, None, None
-		self.trainable_layers_num, self.sps, self.batch_size = 4, sps, bs
-
+		self.trainable_layers_num, self.sps, self.batch_size = trainable_layers_num, sps, bs
 
 class SFTTrainer:
-	def __init__(self, model_dir, device="cuda:0", epochs=1, samples_per_step=10, batch_size=2, data_collator=None, train_dataset=None, eval_dataset=None):
-		assert all(x is not None for x in [model, data_collator, train_dataset, samples_per_step, batch_size]), "can not be None"
-		device = torch.device("cuda:0")
-		g = Global(device, sps=samples_per_step, bs=batch_size)
+	def __init__(self,
+		model_dir, output_dir="./model_temp/",
+		device="cuda:0",
+		trainable_layers_num=4, epochs=1, samples_per_step=10, batch_size=2,
+		save_steps=2, eval_steps=2,
+		data_collator=None, train_dataset=None, eval_dataset=None):
+		assert all(x is not None for x in [model_dir, data_collator, samples_per_step, batch_size]), "can not be None"
+		device = torch.device(device)
+		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size)
 		g.loader = SingleDenseWeightsLoader(model_dir, device=device)
 		llama.g = g
-		model = LlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
+		model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
 		#model.offload_layers_to_cpu(layers_num=1) #model.num_hidden_layers - g.trainable_layers_num
-		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)		
+		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)
 		
 		# gradient checkpointing
 		model.gradient_checkpointing_enable()
@@ -53,38 +57,41 @@ class SFTTrainer:
 			task_type="CAUSAL_LM"
 		)
 		model = get_peft_model(model, peft_config)
-		#model = PeftModel.from_pretrained(model, "./model_temp")
-		model.print_trainable_parameters()
+		#model.load_adapter("./model_temp/checkpoint-20", adapter_name="default")
+		model.print_trainable_parameters()		
 		#./endOf peft
+
 		model.to(device)
 
 		self.model, self.g, self.device = model, g, device
+		self.epochs, self.save_steps, self.eval_steps, self.output_dir = epochs, save_steps, eval_steps, output_dir
 		self.data_collator = data_collator
-		self.epochs = epochs
 		self.train_ds = train_dataset.with_format("torch")
-		self.test_ds = test_dataset.with_format("torch") if test_dataset else None
+		self.test_ds = eval_dataset.with_format("torch") if eval_dataset else None
+
+
+	def train(self, resume_from_checkpoint=None):		
+		print('-'*20 + ' Starting Trainig ... ' + '-'*20)
+		model, g = self.model, self.g
+		if resume_from_checkpoint: model.load_adapter(resume_from_checkpoint, adapter_name="default")
+		test_loader = DataLoader(self.test_ds, batch_size=g.sps, shuffle=True) if self.test_ds else None
+		train_len = len(self.train_ds)		
+		total_batch_steps, verbose_step = (train_len // g.batch_size) * self.epochs, 1
 		g.optimizer = AdamW(model.parameters(), lr = 5e-5, eps = 1e-8)
 		#g.optimizer = CPUOffloadOptimizer(model.parameters(), torch.optim.AdamW, offload_gradients=True, fused=True)
-		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = 0, num_training_steps = total_steps)
+		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = 0, num_training_steps = total_batch_steps)
 
-
-	def train(self):
-		print('-'*20 + ' Starting Trainig ... ' + '-'*20)		
-		model, g = self.model, self.g
-		test_loader = DataLoader(self.test_ds, batch_size=g.sps, shuffle=True)
-		verbose_step, stepsN = 1, int(len(train_ds) / g.batch_size)
-		total_steps = stepsN * epochs  #len(train_dataloader) * epochs				
-
-		for epoch_i in range(1, epochs+1):
-			print('======== Epoch {:} / {:} ========'.format(epoch_i, epochs), flush=True)
+		step = 0
+		for epoch_i in range(1, self.epochs+1):
+			print('======== Epoch {:} / {:} ========'.format(epoch_i, self.epochs), flush=True)
 			t0 = time.time()
 			model.train()
 			train_loader = DataLoader(self.train_ds, batch_size=g.sps, shuffle=True)
-			step, total_loss = 0, 0
+			total_loss = 0
 			for batch in train_loader:
 				step+=1
-				if step % verbose_step == 0 and not step == 0: print('  Batch {:>5,}  of  {:>5,}.'.format(step, stepsN), flush=True)
-				x = data_collator.__call__(batch)
+				if step % verbose_step == 0 and not step == 0: print('\tStep {:>5,}  of  {:>5,}.'.format(step, (train_len // g.sps) * self.epochs), flush=True)
+				x = self.data_collator.__call__(batch)
 				if mode==2: #normal training
 					loss = model(input_ids=x["input_ids"].to(g.device), attention_mask=x["attention_mask"].to(g.device), labels=x["labels"].to(g.device)).loss
 					total_loss += loss.item()
@@ -94,21 +101,28 @@ class SFTTrainer:
 					g.optimizer.zero_grad()
 				else:
 					total_loss += model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])
-
+				
+				#del batch, x			
 				# eval
-				model.eval()
-				compute_eval(test_loader)
-				model.train()
-				#./eval
+				if step % self.eval_steps==0 and test_loader:
+					model.eval()
+					self.compute_eval(test_loader)
+					model.train()
+				
+				# save
+				if step % self.save_steps==0:
+					model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
+					print("\tCheckpoint saved.")
 
-			avg_train_loss = total_loss / step
-			print("\tAverage training loss: {0:.7f}".format(avg_train_loss))
+			avg_train_loss = total_loss / (train_len // g.sps)
 			print("\tTraining epoch took: {:}".format(time.time() - t0))
-			model.save_pretrained("./model_temp/")
+			print("\tAverage training loss: {0:.7f}".format(avg_train_loss))
 
+
+	@torch.no_grad
 	def compute_eval(self, test_loader):
 		test_loss = 0
 		for batch_test in test_loader:
-			x = self.data_collator.__call__(batch_test)
+			x = self.data_collator.__call__(batch_test)			
 			test_loss += self.model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"], is_eval=True)
 		print("\tValidation loss (mean):", test_loss / len(test_loader))

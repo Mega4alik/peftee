@@ -105,13 +105,13 @@ class MyLlamaModel(LlamaModel):
 			#print("hidden_states:", hidden_states.shape, "past_key_values:", past_key_values,  "position_embeddings:", position_embeddings[0].shape, position_embeddings[1].shape, "position_ids:", position_ids.shape, "cache_position:", cache_position.shape); exit()
 			
 			self.embed_tokens.cpu(); self.parent_lm_head.cpu()
-			hidden_states, causal_mask = hidden_states.cpu(), (causal_mask.cpu() if causal_mask else None)
+			hidden_states, causal_mask = hidden_states.cpu(), (causal_mask.cpu() if causal_mask is not None else None)
 
 			for layer_idx in range(0, self.num_hidden_layers - g.trainable_layers_num):
 				decoder_layer, hs = self.layers[layer_idx], []
 				decoder_layer._load_layer_weights()
 				for left in range(0, hidden_states.shape[0], bs):
-					b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask else None
+					b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask is not None else None
 					b_hidden_states = decoder_layer.forward(
 						hidden_states[left:left+bs].to(device),
 						attention_mask=b_causal_mask,
@@ -133,7 +133,7 @@ class MyLlamaModel(LlamaModel):
 
 			for left in range(0, hidden_states.shape[0], bs):
 				b_hidden_states = hidden_states[left:left+bs].to(device)
-				b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask else None
+				b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask is not None else None
 				b_labels = labels[left:left+bs].to(device)
 				for decoder_layer in self.layers[self.num_hidden_layers-g.trainable_layers_num : self.num_hidden_layers]:
 					b_hidden_states = decoder_layer(
