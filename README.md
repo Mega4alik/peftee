@@ -7,10 +7,31 @@
 </p>
 
 <h3 align="center">
-LLM Inference for Large-Context Offline Workloads
+Efficient LLM fine-tuning on small VRAM (IN DEVELOPMENT!)
 </h3>
 
-oLLM is a lightweight Python library for large-context LLM inference, built on top of Huggingface Transformers and PyTorch. It enables running models like [gpt-oss-20B](https://huggingface.co/openai/gpt-oss-20b), [qwen3-next-80B](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Instruct) or [Llama-3.1-8B-Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) on 100k context using ~$200 consumer GPU with 8GB VRAM.  No quantization is used—only fp16/bf16 precision. 
+peftee (PEFT-ee) is a lightweight Python library for large-context LLM inference, built on top of Huggingface Transformers and PyTorch.   No quantization is used—only fp16/bf16 precision. 
+
+Since most real-world “fine-tuning” is actually output-style alignment, you don’t need to change deep model representations — just the top reasoning layers and output heads.
+Hence:
+✅ Better to apply LoRA to only the last 4–8 transformer blocks in BF16 precision
+than to quantize everything and LoRA all layers.
+
+It trains faster, is more stable, and directly affects the linguistic output behavior without disturbing factual embeddings.
+
+⚡ 4. Combined best practice
+
+Hybrid strategy for production systems:
+
+Frozen base model (factual memory).
+
+LoRA (last layers) → behavioral/style alignment.
+
+RAG or toolformer layer → external factual grounding.
+
+Optionally: function calling or structured decoding for task reliability.
+
+This combination (LoRA + RAG) is what’s behind most modern pipelines like Claude 3’s retrieval, GPTs with memory, and Gemini 1.5.
 
 
 ---
