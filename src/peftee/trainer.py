@@ -28,8 +28,8 @@ class SFTTrainer:
 		model_dir, output_dir="./model_temp/",
 		device="cuda:0", 
 		trainable_layers_num=4, offload_cpu_layers_num=None, peft_config=None,
-		epochs=1, samples_per_step=10, batch_size=2,
-		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True,
+		epochs=1, samples_per_step=10, batch_size=2, learning_rate=1e-4,
+		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True, 
 		data_collator=None, train_dataset=None, eval_dataset=None):
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		device = torch.device(device)
@@ -62,7 +62,8 @@ class SFTTrainer:
 		model.to(device)
 
 		self.model, self.g, self.device = model, g, device
-		self.epochs, self.save_steps, self.eval_steps, self.output_dir = epochs, save_steps, eval_steps, output_dir
+		self.save_steps, self.eval_steps, self.output_dir = save_steps, eval_steps, output_dir
+		self.epochs, self.learning_rate = epochs, learning_rate
 		self.data_collator = data_collator
 		self.train_ds = train_dataset.with_format("torch")
 		self.test_ds = eval_dataset.with_format("torch") if eval_dataset else None
@@ -75,7 +76,7 @@ class SFTTrainer:
 		test_loader = DataLoader(self.test_ds, batch_size=g.sps, shuffle=True) if self.test_ds else None
 		train_len = len(self.train_ds)
 		total_batch_steps, verbose_step = math.ceil(train_len / g.batch_size) * self.epochs, 1
-		g.optimizer = AdamW(model.parameters(), lr = 2e-4, eps = 1e-8)
+		g.optimizer = AdamW(model.parameters(), lr = self.learning_rate, eps = 1e-8)
 		#g.optimizer = CPUOffloadOptimizer(model.parameters(), torch.optim.AdamW, offload_gradients=True, fused=True)
 		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = 0, num_training_steps = total_batch_steps)
 
@@ -84,7 +85,7 @@ class SFTTrainer:
 			print('======== Epoch {:} / {:} ========'.format(epoch_i, self.epochs), flush=True)
 			t0 = time.time()
 			model.train()
-			train_loader = DataLoader(self.train_ds, batch_size=g.sps, shuffle=True, num_workers=4, prefetch_factor=2)
+			train_loader = DataLoader(self.train_ds, batch_size=g.sps, shuffle=True, num_workers=1, prefetch_factor=2)
 			total_loss = 0
 			for batch in train_loader:
 				step+=1
@@ -102,7 +103,7 @@ class SFTTrainer:
 						print('\tStep {:>5,}  of  {:>5,}.'.format(step, math.ceil(train_len / g.sps) * self.epochs), "loss:", loss)
 					total_loss += loss
 				
-				#del batch, x			
+				#del batch, x
 				# eval
 				if step % self.eval_steps==0 and test_loader:
 					model.eval()
@@ -120,8 +121,7 @@ class SFTTrainer:
 		# save last
 		if step % self.save_steps!=0:
 			model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
-			print("\tCheckpoint saved.")		
-
+			print("\tCheckpoint saved.")
 
 
 	@torch.no_grad
@@ -131,3 +131,31 @@ class SFTTrainer:
 			x = self.data_collator.__call__(batch_test)			
 			test_loss += self.model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"], is_eval=True)
 		print("\tValidation loss (mean):", test_loss / len(test_loader))
+
+#========================================================================================================
+
+
+class defaultDataCollator:
+	def __init__(self, tokenizer, logging=False, is_eval=False):
+		self.tokenizer = tokenizer
+		self.logging, self.is_eval = logging, is_eval
+
+	def __call__(self, features):
+		tokenizer = self.tokenizer
+		input_ids, labels = [], []
+		for i, prompt in enumerate(features["prompt"]):
+			completion = features["completion"][i]
+			full = f"{prompt}{completion}{tokenizer.eos_token}" # Compose full text
+			full_tokens = tokenizer(full).input_ids
+			prompt_tokens = tokenizer(prompt).input_ids
+			ptn = len(prompt_tokens)
+			label_ids = [-100]*(ptn-1) + full_tokens[ptn:]
+			input_ids.append(torch.tensor(full_tokens[:-1] if self.is_eval==False else prompt_tokens))
+			labels.append(torch.tensor(label_ids))
+
+		input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
+		labels = pad_sequence(labels, batch_first=True, padding_value=-100)
+		attention_mask = input_ids.ne(tokenizer.pad_token_id).long()
+		if self.logging:
+			print("input_ids:", input_ids.shape, "labels:", labels.shape)
+		return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}

@@ -1,36 +1,15 @@
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from transformers import AutoTokenizer, TextStreamer
 from peft import LoraConfig
-from peftee import SFTTrainer
+from peftee import SFTTrainer, defaultDataCollator
 
 def preprocess(ex):
     return {
       "prompt": f"Given schema {ex['schema']}, extract the fields from: {ex['text']}",
       "completion": ex["item"]
     }
-
-class myDataCollator:
-	def __call__(self, features):
-		input_ids, labels = [], []
-		for i, prompt in enumerate(features["prompt"]):
-			completion = features["completion"][i]
-			full = f"{prompt}{completion}<|eot_id|>" # Compose full text
-			full_tokens = tokenizer(full).input_ids
-			prompt_tokens = tokenizer(prompt).input_ids
-			ptn = len(prompt_tokens)
-			label_ids = [-100]*(ptn-1) + full_tokens[ptn:]
-			input_ids.append(torch.tensor(full_tokens[:-1] if mode in [1,2] else prompt_tokens))
-			labels.append(torch.tensor(label_ids))
-
-		input_ids = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
-		labels = pad_sequence(labels, batch_first=True, padding_value=-100)
-		attention_mask = input_ids.ne(tokenizer.pad_token_id).long()
-		print(input_ids.shape, labels.shape, attention_mask.shape)
-		return {"input_ids": input_ids, "labels": labels, "attention_mask": attention_mask}
-
 
 if __name__=="__main__":
 	mode = 1 #1-peftee train, 2-normal train, 3-eval
@@ -46,9 +25,10 @@ if __name__=="__main__":
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
 	print("Dataset train, test sizes:", len(train_dataset), len(test_dataset))
 
-	data_collator = myDataCollator()
+	
 
 	if mode==1:
+		data_collator = defaultDataCollator(tokenizer, is_eval=False, logging=True) #input: prompt, completion. output: input_ids, attention_mask, labels
 		peft_config = LoraConfig(
 			target_modules=["self_attn.q_proj", "self_attn.v_proj", "self_attn.o_proj", "self_attn.k_proj"], # it will automatically adapt to last trainable layers
 			r=8, #8-32
@@ -68,6 +48,7 @@ if __name__=="__main__":
 			batch_size=1,
 			gradient_accumulation_batch_steps=2,
 			gradient_checkpointing=True,
+			learning_rate=2e-4,
 			eval_steps=10,
 			save_steps=10,
 			data_collator=data_collator,
@@ -80,6 +61,7 @@ if __name__=="__main__":
 	elif mode==3: # test
 		# pip install git+https://github.com/Mega4alik/ollm/PeftInference
 		from ollm.inference import PeftInference
+		data_collator = defaultDataCollator(tokenizer, is_eval=True, logging=False)
 		o = PeftInference("/media/mega4alik/ssd/models/llama3-1B-chat", "/home/mega4alik/Desktop/python/peftee/model_temp/checkpoint-20", device="cuda:0")
 		text_streamer = TextStreamer(o.tokenizer, skip_prompt=True, skip_special_tokens=False)
 		test_ds = DataLoader(test_dataset, batch_size=1, shuffle=True)
