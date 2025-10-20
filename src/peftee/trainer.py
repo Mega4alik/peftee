@@ -27,20 +27,24 @@ class SFTTrainer:
 		model_dir, output_dir="./model_temp/",
 		device="cuda:0", 
 		trainable_layers_num=4, offload_cpu_layers_num=None, peft_config=None,
-		epochs=1, samples_per_step=10, batch_size=2, learning_rate=1e-4,
-		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True, 
+		epochs=1, samples_per_step=100, batch_size=2, learning_rate=1e-4,
+		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True,
 		data_collator=None, train_dataset=None, eval_dataset=None):
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		device = torch.device(device)
 		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
 
 		# model
-		g.loader = DenseWeightsLoader(model_dir, device=device) if self.is_sharded(model_dir) else SingleDenseWeightsLoader(model_dir, device=device)
-		from . import llama
-		llama.g = g
-		model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
-		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)
+		if mode==2:
+			model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16)
+			model.num_hidden_layers = len(model.model.layers)
+		else:
+			from . import llama
+			g.loader = DenseWeightsLoader(model_dir, device=device) if self.is_sharded(model_dir) else SingleDenseWeightsLoader(model_dir, device=device)			
+			llama.g = g
+			model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",			
 		
+		# offload		
 		if offload_cpu_layers_num:
 			model.offload_layers_to_cpu(layers_num=min(offload_cpu_layers_num, model.num_hidden_layers-g.trainable_layers_num))
 
@@ -76,7 +80,7 @@ class SFTTrainer:
 		is_sharded = any("index.json" in f for f in files)
 		return is_sharded
 
-	def train(self, resume_from_checkpoint=None):		
+	def train(self, resume_from_checkpoint=None):
 		print('-'*20 + ' Starting Trainig ... ' + '-'*20)
 		model, g = self.model, self.g
 		if resume_from_checkpoint: model.load_adapter(resume_from_checkpoint, adapter_name="default")
@@ -105,10 +109,10 @@ class SFTTrainer:
 					g.scheduler.step()
 					g.optimizer.zero_grad()
 				else:
-					loss = model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])					
+					loss = model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])
+					total_loss += loss
 					if step % verbose_step == 0:
 						print('\tStep {:>5,}  of  {:>5,}.'.format(step, math.ceil(train_len / g.sps) * self.epochs), "loss:", loss)
-					total_loss += loss
 				
 				#del batch, x
 				# eval
@@ -128,7 +132,7 @@ class SFTTrainer:
 		# save last
 		if step % self.save_steps!=0:
 			model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
-			print("\tCheckpoint saved.")
+			print("\tFinal Checkpoint saved.")
 
 
 	@torch.no_grad

@@ -39,10 +39,10 @@ if __name__=="__main__":
 			output_dir="./model_temp/",		
 			device="cuda:0",
 			trainable_layers_num=4, #4-8, last layers
-			offload_cpu_layers_num=2, #99 for maximum offload to CPU
+			offload_cpu_layers_num=0, #99 for maximum offload to CPU
 			peft_config=peft_config,
 			epochs=1,
-			samples_per_step=50, #100-500, depending on available RAM
+			samples_per_step=100, #100-500, depending on available RAM
 			batch_size=1,
 			gradient_accumulation_batch_steps=2,
 			gradient_checkpointing=True,
