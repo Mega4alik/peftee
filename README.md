@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD001 MD041 -->
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://ollm.s3.us-east-1.amazonaws.com/files/logo2.png">
+    <source media="(prefers-color-scheme: dark)" srcset="https://ollm.s3.us-east-1.amazonaws.com/files/peftee/logo1.png">
     <img alt="peftee" src="" width=52%>
   </picture>
 </p>

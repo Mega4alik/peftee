@@ -11,7 +11,6 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 from peft import get_peft_model, LoraConfig
 #from torchao.optim import CPUOffloadOptimizer #?
-from . import llama
 from .gds_loader import SingleDenseWeightsLoader, DenseWeightsLoader
 
 mode = 1 #1-peftee, 2-normal training
@@ -34,7 +33,10 @@ class SFTTrainer:
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		device = torch.device(device)
 		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
-		g.loader = SingleDenseWeightsLoader(model_dir, device=device)
+
+		# model
+		g.loader = DenseWeightsLoader(model_dir, device=device) if self.is_sharded(model_dir) else SingleDenseWeightsLoader(model_dir, device=device)
+		from . import llama
 		llama.g = g
 		model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
 		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)
@@ -51,9 +53,10 @@ class SFTTrainer:
 
 		# peft
 		target_modules = []
+		prefix = "language_model." if hasattr(model, "language_model") else ""
 		for tm in peft_config.target_modules:
 			for i in range(model.num_hidden_layers - g.trainable_layers_num, model.num_hidden_layers):
-				target_modules.append(f"model.layers.{i}.{tm}")
+				target_modules.append(f"{prefix}model.layers.{i}.{tm}")
 		peft_config.target_modules = target_modules
 		model = get_peft_model(model, peft_config)
 		model.print_trainable_parameters()
@@ -68,6 +71,10 @@ class SFTTrainer:
 		self.train_ds = train_dataset.with_format("torch")
 		self.test_ds = eval_dataset.with_format("torch") if eval_dataset else None
 
+	def is_sharded(self, model_dir):
+		files = os.listdir(model_dir)
+		is_sharded = any("index.json" in f for f in files)
+		return is_sharded
 
 	def train(self, resume_from_checkpoint=None):		
 		print('-'*20 + ' Starting Trainig ... ' + '-'*20)
@@ -135,7 +142,7 @@ class SFTTrainer:
 #========================================================================================================
 
 
-class defaultDataCollator:
+class DefaultDataCollator:
 	def __init__(self, tokenizer, logging=False, is_eval=False):
 		self.tokenizer = tokenizer
 		self.logging, self.is_eval = logging, is_eval
