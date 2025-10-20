@@ -162,9 +162,9 @@ class MyLlamaModel(LlamaModel):
 						g.optimizer.zero_grad()						
 				del logits, b_labels #, loss
 
-		g.optimizer.zero_grad()
-		self.embed_tokens.to(device)
-		return total_loss
+			g.optimizer.zero_grad()
+			self.embed_tokens.to(device)
+			return total_loss / bstep
 		
 
 # Monkey-patch

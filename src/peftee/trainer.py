@@ -4,16 +4,15 @@
 import json, os, random, time, math
 import datetime
 from torch.utils.data import DataLoader, Dataset
-from transformers import Trainer, TrainingArguments, get_linear_schedule_with_warmup, AutoModel, AutoTokenizer, AutoModelForCausalLM
-from torch.optim import AdamW
+from transformers import get_linear_schedule_with_warmup, AutoModelForCausalLM
 import torch
+from torch.optim import AdamW
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
-from peft import get_peft_model, LoraConfig, PeftModel
+from peft import get_peft_model, LoraConfig
 #from torchao.optim import CPUOffloadOptimizer #?
 from . import llama
 from .gds_loader import SingleDenseWeightsLoader, DenseWeightsLoader
-
 
 mode = 1 #1-peftee, 2-normal training
 
@@ -27,40 +26,37 @@ class Global:
 class SFTTrainer:
 	def __init__(self,
 		model_dir, output_dir="./model_temp/",
-		device="cuda:0",
-		trainable_layers_num=4, epochs=1, samples_per_step=10, batch_size=2,
-		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None,
+		device="cuda:0", 
+		trainable_layers_num=4, offload_cpu_layers_num=None, peft_config=None,
+		epochs=1, samples_per_step=10, batch_size=2,
+		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True,
 		data_collator=None, train_dataset=None, eval_dataset=None):
-		assert all(x is not None for x in [model_dir, data_collator, samples_per_step, batch_size]), "can not be None"
+		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		device = torch.device(device)
 		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
 		g.loader = SingleDenseWeightsLoader(model_dir, device=device)
 		llama.g = g
 		model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
-		#model.offload_layers_to_cpu(layers_num=1) #model.num_hidden_layers - g.trainable_layers_num
 		#if mode==2: model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, ignore_mismatched_sizes=True)
 		
+		if offload_cpu_layers_num:
+			model.offload_layers_to_cpu(layers_num=min(offload_cpu_layers_num, model.num_hidden_layers-g.trainable_layers_num))
+
 		# gradient checkpointing
-		model.gradient_checkpointing_enable()
-		model.model.layers[-g.trainable_layers_num].gradient_checkpointing = False
-		if hasattr(model.config, "use_cache"): model.config.use_cache = False
+		if gradient_checkpointing:
+			model.gradient_checkpointing_enable()
+			model.model.layers[-g.trainable_layers_num].gradient_checkpointing = False
+			if hasattr(model.config, "use_cache"): model.config.use_cache = False
 		# ./endOf gradient checkpointing
 
 		# peft
-		layers = model.model.layers
-		target_layers = [f"model.layers.{i}" for i in range(len(layers) - g.trainable_layers_num, len(layers))]
-		peft_config = LoraConfig(
-			target_modules= [f"{prefix}.self_attn.q_proj" for prefix in target_layers]
-						  + [f"{prefix}.self_attn.v_proj" for prefix in target_layers]
-						  + [f"{prefix}.self_attn.o_proj" for prefix in target_layers]
-						  + [f"{prefix}.self_attn.k_proj" for prefix in target_layers],
-			#target_modules=["self_attn.q_proj", "self_attn.v_proj"],
-			r=16, #4
-			lora_alpha=32,
-			task_type="CAUSAL_LM"
-		)
-		model = get_peft_model(model, peft_config)		
-		model.print_trainable_parameters()		
+		target_modules = []
+		for tm in peft_config.target_modules:
+			for i in range(model.num_hidden_layers - g.trainable_layers_num, model.num_hidden_layers):
+				target_modules.append(f"model.layers.{i}.{tm}")
+		peft_config.target_modules = target_modules
+		model = get_peft_model(model, peft_config)
+		model.print_trainable_parameters()
 		#./endOf peft
 
 		model.to(device)
@@ -117,9 +113,15 @@ class SFTTrainer:
 				if step % self.save_steps==0:
 					model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
 					print("\tCheckpoint saved.")
-			
+
 			print("\tTraining epoch took: {:}".format(time.time() - t0))
 			print("\tAverage training loss: {0:.7f}".format(total_loss / math.ceil(train_len / g.sps)))
+		
+		# save last
+		if step % self.save_steps!=0:
+			model.save_pretrained(os.path.join(self.output_dir, f"checkpoint-{step}"))
+			print("\tCheckpoint saved.")		
+
 
 
 	@torch.no_grad
