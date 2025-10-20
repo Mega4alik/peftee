@@ -25,7 +25,7 @@ if __name__=="__main__":
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
 	print("Dataset train, test sizes:", len(train_dataset), len(test_dataset))
 
-	if mode==1:		
+	if mode==1:
 		data_collator = DefaultDataCollator(tokenizer, is_eval=False, logging=True) #input: prompt, completion. output: input_ids, attention_mask, labels
 		peft_config = LoraConfig(
 			target_modules=["self_attn.q_proj", "self_attn.v_proj"], # "self_attn.o_proj", "self_attn.k_proj" it will automatically adapt to last trainable layers
