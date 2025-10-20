@@ -139,7 +139,7 @@ pip install --no-build-isolation ollm
 ``` 
 
 ```python
-from ollm.inference import AutoInference
+from ollm import AutoInference
 data_collator = DefaultDataCollator(tokenizer, is_eval=True, logging=False)
 o = AutoInference(model_dir, adapter_dir="./mymodel/checkpoint-20/", device="cuda:0")
 text_streamer = TextStreamer(o.tokenizer, skip_prompt=True, skip_special_tokens=False)

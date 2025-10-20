@@ -12,7 +12,7 @@ def preprocess(ex):
     }
 
 if __name__=="__main__":
-	mode = 1 #1-train, 2-test
+	mode = 2 #1-train, 2-test
 	model_dir = "/media/mega4alik/ssd/models/llama3-1B-chat/"
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
@@ -33,7 +33,6 @@ if __name__=="__main__":
 			lora_alpha=16, #r*2 normally
 			task_type="CAUSAL_LM"
 		)
-
 		trainer = SFTTrainer(
 			model_dir,
 			output_dir="./model_temp/",		
@@ -53,14 +52,13 @@ if __name__=="__main__":
 			train_dataset=train_dataset,
 			eval_dataset=test_dataset
 		)
-
 		trainer.train(resume_from_checkpoint=None) #checkpoint dir
 
 	elif mode==2: # test
-		# pip install git+https://github.com/Mega4alik/ollm/PeftInference
-		from ollm.inference import PeftInference
+		# pip install ollm 
+		from ollm import AutoInference
 		data_collator = DefaultDataCollator(tokenizer, is_eval=True, logging=False)
-		o = PeftInference(model_dir, adapter_dir=None, device="cuda:0") #"/home/mega4alik/Desktop/python/peftee/model_temp/checkpoint-20"
+		o = AutoInference(model_dir, adapter_dir="/home/mega4alik/Desktop/python/peftee/model_temp/checkpoint-20", device="cuda:0") #
 		text_streamer = TextStreamer(o.tokenizer, skip_prompt=True, skip_special_tokens=False)
 		test_ds = DataLoader(test_dataset, batch_size=1, shuffle=True)
 		for sample in test_ds:
