@@ -1,44 +1,24 @@
+
 <!-- markdownlint-disable MD001 MD041 -->
 <p align="center">
 	<picture>
-		<source media="(prefers-color-scheme: dark)" srcset="https://ollm.s3.us-east-1.amazonaws.com/peftee/logo1.png">
-		<img alt="peftee" src="https://ollm.s3.us-east-1.amazonaws.com/peftee/logo1.png" width=52%>
+		<source media="(prefers-color-scheme: dark)" srcset="https://ollm.s3.us-east-1.amazonaws.com/peftee/logo_wide.png">
+		<img alt="peftee" src="https://ollm.s3.us-east-1.amazonaws.com/peftee/logo_wide.png" width=60%>
 	</picture>
 </p>
 <h3 align="center">
-Efficient LLM fine-tuning on small VRAM (IN DEVELOPMENT!)
+Efficient LLM fine-tuning with less VRAM
 </h3>
 
-**peftee** (PEFT-ee) is a lightweight Python library for efficient LLM fine-tuning, built on top of Hugging Face Transformers and PyTorch. It enables fine-tuning models like **Llama3-8B** on **8 GB GPUs** with minimal speed loss ⚡ (~9s per 100 samples at 2k context length) while saving **~13 GB** of VRAM. No quantization is used — only **fp16/bf16** precision.
+**peftee** (PEFT-ee) is a lightweight Python library for efficient LLM fine-tuning, built on top of Hugging Face Transformers and PyTorch. It enables fine-tuning models like **Llama3-8B** on **8 GB GPUs** with minimal speed loss ⚡ (**~9s** per 100 samples at 2k context length) while saving **~14 GB** (7.6 vs 21.8) of VRAM [▶️ Colab Notebook](https://colab.research.google.com/drive/1c1LlTm5md0vTXgqv0w6H1j7GO9prmps0?usp=sharing). No quantization is used — only **fp16/bf16** precision.
 
 > 💡 **Intuition**  
-> Today's LLM fine-tuning is mostly about adapting style, structure behavious, not knowledge insertion (RAG is better for it). Futhermore, normally we don't need to fine-tune all transformer layers, only last few (4-8) using some adapter like LoRA. **peftee** built for exactly this scenari
+> Today, LLM fine-tuning is mostly about adapting **style**, **structure**, and **behavior**, rather than inserting new knowledge — for that, **RAG** is a better approach. Moreover, in most cases, there’s no need to fine-tune all transformer layers; updating only the last few (typically 4–8) with an adapter such as **LoRA** is sufficient. **peftee** is built precisely for this scenario.
 
 ---
- ## TEMP
-✅ Better to apply LoRA to only the last 4–8 transformer blocks in BF16 precision
-than to quantize everything and LoRA all layers.
-It trains faster, is more stable, and directly affects the linguistic output behavior without disturbing factual embeddings.
+⭐ *How do we achieve this:*
 
-⚡ 4. Combined best practice
-
-Hybrid strategy for production systems:
-
-Frozen base model (factual memory).
-
-LoRA (last layers) → behavioral/style alignment.
-
-RAG or toolformer layer → external factual grounding.
-
-Optionally: function calling or structured decoding for task reliability.
-
-This combination (LoRA + RAG) is what’s behind most modern pipelines like Claude 3’s retrieval, GPTs with memory, and Gemini 1.5.
-
----
-
-How do we achieve this:
-
-- Intelligently using using Disk (SSD preferable) and CPU offloading with minimum overhead
+- Intelligently using Disk (SSD preferable) and CPU offloading with minimal overhead
 <p align="left">
 	<img src="https://ollm.s3.us-east-1.amazonaws.com/peftee/scheme.jpg">
 </p>
@@ -47,11 +27,11 @@ How do we achieve this:
 - Gradient checkpointing
 - Optimizer states offloading (experimental)
 - Flash-attention2 to minimize VRAM usage
-
-
 ---
-**Supported GPUs**: NVIDIA, AMD, and Apple Silicon (MacBook).
 
+**Supported model families:** ✅ Llama3, Gemma3 (coming)
+
+**Supported GPUs**: NVIDIA, AMD, and Apple Silicon (MacBook).
 
 
 ## Getting Started
