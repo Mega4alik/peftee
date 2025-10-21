@@ -101,7 +101,6 @@ class SFTTrainer:
 			for batch in train_loader:
 				step+=1
 				x = self.data_collator.__call__(batch)
-				t1 = time.time() # temp
 				if mode==2: #normal training
 					loss = model(input_ids=x["input_ids"].to(g.device), attention_mask=x["attention_mask"].to(g.device), labels=x["labels"].to(g.device)).loss
 					total_loss += loss.item()
@@ -114,7 +113,6 @@ class SFTTrainer:
 					total_loss += loss
 					if step % verbose_step == 0:
 						print('\tStep {:>5,}  of  {:>5,}.'.format(step, math.ceil(train_len / g.sps) * self.epochs), "loss:", loss)
-				print("Step time:", time.time() - t1)
 				
 				#del batch, x
 				# eval

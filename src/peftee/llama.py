@@ -108,14 +108,15 @@ class MyLlamaModel(LlamaModel):
 			self.embed_tokens.cpu(); self.parent_lm_head.cpu()
 			hidden_states, causal_mask = hidden_states.cpu(), (causal_mask.cpu() if causal_mask is not None else None)
 
-			window_size = g.trainable_layers_num
+			window_size = g.trainable_layers_num * 2
 			for layer_idx in range(0, self.num_hidden_layers - g.trainable_layers_num, window_size):
-				for decoder_layer in self.layers[layer_idx:layer_idx+window_size]: decoder_layer._load_layer_weights()
+				sublayers = self.layers[layer_idx: min(layer_idx+window_size, self.num_hidden_layers-g.trainable_layers_num)]
+				for decoder_layer in sublayers: decoder_layer._load_layer_weights()
 				hs = []
 				for left in range(0, hidden_states.shape[0], bs):
 					b_hidden_states = hidden_states[left:left+bs].to(device)
-					b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask is not None else None					
-					for decoder_layer in self.layers[layer_idx:layer_idx+window_size]:
+					b_causal_mask = causal_mask[left:left+bs].to(device) if causal_mask is not None else None
+					for decoder_layer in sublayers:
 						b_hidden_states = decoder_layer.forward(
 							b_hidden_states,
 							attention_mask=b_causal_mask,
@@ -127,7 +128,7 @@ class MyLlamaModel(LlamaModel):
 						)
 					hs.append(b_hidden_states.cpu())
 				hidden_states = torch.cat(hs, dim=0)
-				for decoder_layer in self.layers[layer_idx:layer_idx+window_size]: decoder_layer._unload_layer_weights()
+				for decoder_layer in sublayers: decoder_layer._unload_layer_weights()
 		
 		#=== stage 2 ===
 		if 1==1: #with autocast(dtype=torch.bfloat16):

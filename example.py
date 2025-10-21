@@ -12,8 +12,8 @@ def preprocess(ex):
     }
 
 if __name__=="__main__":
-	mode = 2 #1-train, 2-test
-	model_dir = "/media/mega4alik/ssd/models/llama3-1B-chat/"
+	mode = 1 #1-train, 2-test
+	model_dir = "/media/mega4alik/ssd/models/llama3-8B-chat/"
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
 	tokenizer.truncation_side = 'left'
@@ -35,7 +35,7 @@ if __name__=="__main__":
 		)
 		trainer = SFTTrainer(
 			model_dir,
-			output_dir="./model_temp/",		
+			output_dir="./model_temp/",
 			device="cuda:0",
 			trainable_layers_num=4, #4-8, last layers
 			offload_cpu_layers_num=0, #99 for maximum offload to CPU
