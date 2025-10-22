@@ -7,18 +7,18 @@ from peftee import SFTTrainer, DefaultDataCollator
 
 def preprocess(ex):
     return {
-      "prompt": f"Given schema {ex['schema']}, extract the fields from: {ex['text']}",
-      "completion": ex["item"]
+      "prompt": f"Extract short summary from document: {ex['document']}\nSummary:\n",
+      "completion": ex["summary"]
     }
 
 if __name__=="__main__":
 	mode = 1 #1-train, 2-test
-	model_dir = "/media/mega4alik/ssd/models/llama3-8B-chat/"
+	model_dir = "/media/mega4alik/ssd/models/llama3-1B/"
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
 	tokenizer.truncation_side = 'left'
 
-	dataset = load_dataset("paraloq/json_data_extraction")
+	dataset = load_dataset("EdinburghNLP/xsum")
 	dataset = dataset.map(preprocess, batched=False)
 	dataset = dataset.filter(lambda x: len(x["prompt"]) + len(x["completion"]) < 1000*5) #1500*5
 	dataset = dataset["train"].train_test_split(test_size=0.06, seed=42)
@@ -43,10 +43,10 @@ if __name__=="__main__":
 			epochs=1,
 			samples_per_step=100, #100-500, depending on available RAM
 			batch_size=1,
-			gradient_accumulation_batch_steps=2,
+			gradient_accumulation_batch_steps=4,
 			gradient_checkpointing=True,
 			learning_rate=2e-4,
-			eval_steps=4,
+			eval_steps=10,
 			save_steps=10,
 			data_collator=data_collator,
 			train_dataset=train_dataset,

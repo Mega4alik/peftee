@@ -12,8 +12,8 @@ class DefaultDataCollator:
 		for i, prompt in enumerate(features["prompt"]):
 			completion = features["completion"][i]
 			full = f"{prompt}{completion}{tokenizer.eos_token}" # Compose full text
-			full_tokens = tokenizer(full).input_ids
-			prompt_tokens = tokenizer(prompt).input_ids
+			full_tokens = tokenizer(full, add_special_tokens=False).input_ids
+			prompt_tokens = tokenizer(prompt, add_special_tokens=False).input_ids			
 			ptn = len(prompt_tokens)
 			label_ids = [-100]*(ptn-1) + full_tokens[ptn:]
 			input_ids.append(torch.tensor(full_tokens[:-1] if self.is_eval==False else prompt_tokens))
