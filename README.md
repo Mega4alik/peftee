@@ -6,10 +6,10 @@
 	</picture>
 </p>
 <h3 align="center">
-Efficient LLM fine-tuning with less VRAM
+Efficient LLM fine-tuning with <i>much less </i> VRAM
 </h3>
 
-**peftee** (PEFT-ee) is a lightweight Python library for efficient LLM fine-tuning, built on top of Hugging Face Transformers and PyTorch. It enables fine-tuning models like **Llama3-8B** on **8 GB GPUs** with minimal speed loss ⚡ (**~9s** per 100 samples at 2k context length) while saving **~14 GB** (7.6 vs 21.8) of VRAM [▶️ Colab Notebook](https://colab.research.google.com/drive/1c1LlTm5md0vTXgqv0w6H1j7GO9prmps0?usp=sharing). No quantization is used — only **fp16/bf16** precision.
+**peftee** (PEFT-ee) is a lightweight Python library for efficient LLM fine-tuning, built on top of Hugging Face Transformers and PyTorch. It enables fine-tuning models like **Llama3-8B** on **8 GB GPUs** with minimal speed loss ⚡ (**~9s** per 200 samples at 2k context length) while saving **~14 GB** (7.6 vs 21.8) of VRAM [▶️ Colab Notebook](https://colab.research.google.com/drive/1c1LlTm5md0vTXgqv0w6H1j7GO9prmps0?usp=sharing). No quantization is used — only **fp16/bf16** precision.
 
 > 💡 **Intuition**  
 > Today, LLM fine-tuning is mostly about adapting **style**, **structure**, and **behavior**, rather than inserting new knowledge — for that, **RAG** is a better approach. Moreover, in most cases, there’s no need to fine-tune all transformer layers; updating only the last few (typically 4–8) with an adapter such as **LoRA** is sufficient. **peftee** is built precisely for this scenario.
@@ -25,7 +25,7 @@ Efficient LLM fine-tuning with less VRAM
 - Parameter efficient fine-tuning techniques like LoRA
 - Gradient checkpointing
 - Optimizer states offloading (experimental)
-- Flash-attention2 to minimize VRAM usage
+- FlashAttention-2 with online softmax. Full attention matrix is never materialized.
 ---
 
 **Supported model families:** ✅ Llama3, Gemma3 (coming)
