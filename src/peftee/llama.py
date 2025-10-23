@@ -194,3 +194,6 @@ class MyLlamaForCausalLM(LlamaForCausalLM):
 			g.loader.preload_layer_safetensors(base)
 			g.loader.offload_dict_to_gpu_cpu(base, gpu=False)		
 		print(f"./finished offloading layers to CPU {layers_num}/{self.num_hidden_layers}")
+
+	def forward_train(self, **args):
+		return self.model.forward_train(**args)

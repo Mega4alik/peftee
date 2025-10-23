@@ -110,7 +110,7 @@ class SFTTrainer:
 					g.scheduler.step()
 					g.optimizer.zero_grad()
 				else:
-					loss = model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])
+					loss = model.model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"])
 					total_loss += loss
 					if step % verbose_step == 0:
 						print('\tStep {:>5,}  of  {:>5,}.'.format(step, math.ceil(train_len / g.sps) * self.epochs), "loss:", loss)
@@ -141,6 +141,6 @@ class SFTTrainer:
 		test_loss = 0
 		for batch_test in test_loader:
 			x = self.data_collator.__call__(batch_test)			
-			test_loss += self.model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"], is_eval=True)
+			test_loss += self.model.model.model.forward_train(input_ids=x["input_ids"], attention_mask=x["attention_mask"], labels=x["labels"], is_eval=True)
 		print("\tValidation loss (mean):", test_loss / len(test_loader))
 
