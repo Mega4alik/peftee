@@ -74,7 +74,6 @@ class MyLlamaModel(LlamaModel):
 		cache_position: Optional[torch.LongTensor] = None,
 		use_cache: Optional[bool] = None,
 		labels: Optional  = None,
-		is_eval = False,
 		**kwargs: [TransformersKwargs]
 	) -> BaseModelOutputWithPast:
 		bs, device = g.batch_size, g.device
@@ -160,11 +159,11 @@ class MyLlamaModel(LlamaModel):
 				total_loss += loss.item()
 				if self.training:
 					loss.backward()
-					#torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) #optional
+					#torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=0.3) #optional
 					if not g.gabs or bstep % g.gabs==0:
 						g.optimizer.step()
 						g.scheduler.step()
-						g.optimizer.zero_grad()						
+						g.optimizer.zero_grad()
 				del logits, b_labels #, loss
 
 			g.optimizer.zero_grad()
@@ -186,57 +185,7 @@ class MyLlamaForCausalLM(LlamaForCausalLM):
 		self.model.num_hidden_layers = config.num_hidden_layers
 		self.model.vocab_size = config.vocab_size
 		self.model.parent_lm_head = self.lm_head #link
-		self.model.loss_function = self.loss_function		
-		
-
-	def forward_train(
-		self,
-		input_ids: Optional[torch.LongTensor] = None,
-		attention_mask: Optional[torch.Tensor] = None,
-		position_ids: Optional[torch.LongTensor] = None,
-		past_key_values: Optional[Cache] = None,
-		inputs_embeds: Optional[torch.FloatTensor] = None,
-		labels: Optional[torch.LongTensor] = None,
-		use_cache: Optional[bool] = None,
-		cache_position: Optional[torch.LongTensor] = None,
-		logits_to_keep: Union[int, torch.Tensor] = 0,
-		is_eval=False, 
-		**kwargs: Unpack[TransformersKwargs],
-	):
-
-		outputs = self.model.forward_train(
-			input_ids=input_ids,
-			attention_mask=attention_mask,
-			position_ids=position_ids,
-			past_key_values=past_key_values,
-			inputs_embeds=inputs_embeds,
-			use_cache=use_cache,
-			cache_position=cache_position,
-			labels=labels,
-			is_eval=is_eval,
-			**kwargs,
-		)
-		return outputs
-
-		"""
-		hidden_states = outputs.last_hidden_state
-		# Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-		slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-		logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-		loss = None
-		if labels is not None:
-			loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-		
-		return CausalLMOutputWithPast(
-			loss=loss,
-			logits=logits,
-			past_key_values=outputs.past_key_values,
-			hidden_states=outputs.hidden_states,
-			attentions=outputs.attentions,
-		)		
-		"""
-
+		self.model.loss_function = self.loss_function
 
 	def offload_layers_to_cpu(self, layers_num=2):
 		print(f"offloading layers to CPU {layers_num}/{self.num_hidden_layers}...")

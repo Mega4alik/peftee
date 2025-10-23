@@ -31,6 +31,7 @@ if __name__=="__main__":
 			target_modules=["self_attn.q_proj", "self_attn.v_proj"], # "self_attn.o_proj", "self_attn.k_proj" it will automatically adapt to last trainable layers
 			r=8, #8-32
 			lora_alpha=16, #r*2 normally
+			lora_dropout=0.05,
 			task_type="CAUSAL_LM"
 		)
 		trainer = SFTTrainer(
@@ -45,7 +46,8 @@ if __name__=="__main__":
 			batch_size=1,
 			gradient_accumulation_batch_steps=4,
 			gradient_checkpointing=True,
-			learning_rate=2e-4,
+			learning_rate=5e-6,
+			warmup_steps=1000,
 			eval_steps=10,
 			save_steps=10,
 			data_collator=data_collator,

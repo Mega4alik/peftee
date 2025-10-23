@@ -28,8 +28,8 @@ class SFTTrainer:
 		device="cuda:0", 
 		trainable_layers_num=4, offload_cpu_layers_num=None, peft_config=None,
 		epochs=1, samples_per_step=100, batch_size=2, learning_rate=1e-4,
-		save_steps=2, eval_steps=2, gradient_accumulation_batch_steps=None, gradient_checkpointing=True,
-		data_collator=None, train_dataset=None, eval_dataset=None):
+		gradient_accumulation_batch_steps=None, gradient_checkpointing=True, warmup_steps=1000,
+		save_steps=2, eval_steps=2, data_collator=None, train_dataset=None, eval_dataset=None):
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		assert samples_per_step % (batch_size * (gradient_accumulation_batch_steps if gradient_accumulation_batch_steps else 1)) == 0, "samples_per_step % bs*accumulation_steps must be 0"
 		device = torch.device(device)
@@ -71,7 +71,7 @@ class SFTTrainer:
 
 		self.model, self.g, self.device = model, g, device
 		self.save_steps, self.eval_steps, self.output_dir = save_steps, eval_steps, output_dir
-		self.epochs, self.learning_rate = epochs, learning_rate
+		self.epochs, self.learning_rate, self.warmup_steps = epochs, learning_rate, warmup_steps
 		self.data_collator = data_collator
 		self.train_ds = train_dataset.with_format("torch")
 		self.test_ds = eval_dataset.with_format("torch") if eval_dataset else None
@@ -90,7 +90,7 @@ class SFTTrainer:
 		total_batch_steps, verbose_step = math.ceil(train_len / g.batch_size) * self.epochs, 1
 		g.optimizer = AdamW(model.parameters(), lr = self.learning_rate, eps = 1e-8)
 		#g.optimizer = CPUOffloadOptimizer(model.parameters(), torch.optim.AdamW, offload_gradients=True, fused=True)
-		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = 0, num_training_steps = total_batch_steps)
+		g.scheduler = get_linear_schedule_with_warmup(g.optimizer, num_warmup_steps = self.warmup_steps, num_training_steps = total_batch_steps)
 
 		step = 0
 		for epoch_i in range(1, self.epochs+1):
