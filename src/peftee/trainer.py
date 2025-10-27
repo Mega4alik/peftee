@@ -4,7 +4,7 @@
 import json, os, random, time, math
 import datetime
 from torch.utils.data import DataLoader, Dataset
-from transformers import get_linear_schedule_with_warmup, AutoModelForCausalLM
+from transformers import get_linear_schedule_with_warmup, AutoModelForCausalLM, AutoConfig
 import torch
 from torch.optim import AdamW
 from torch import nn
@@ -40,10 +40,20 @@ class SFTTrainer:
 			model = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16)
 			model.num_hidden_layers = len(model.model.layers)
 		else:
-			from . import llama
-			g.loader = DenseWeightsLoader(model_dir, device=device) if self.is_sharded(model_dir) else SingleDenseWeightsLoader(model_dir, device=device)			
-			llama.g = g
-			model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",			
+			g.loader = DenseWeightsLoader(model_dir, device=device) if self.is_sharded(model_dir) else SingleDenseWeightsLoader(model_dir, device=device)
+			config = AutoConfig.from_pretrained(model_dir)
+			arc = config.architectures[0]
+			if arc == "LlamaForCausalLM":
+				from . import llama
+				llama.g = g
+				model = llama.MyLlamaForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True) #attn_implementation="flash_attention_2",
+			elif arc == "Gemma3ForConditionalGeneration" or arc == "Gemma3ForCausalLM":
+				from . import gemma3
+				gemma3.g = g
+				model = gemma3.MyGemma3ForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True)
+			else:
+				raise ValueError("This model type is not supported")			
+		# ./endOf model
 		
 		# offload		
 		if offload_cpu_layers_num:
