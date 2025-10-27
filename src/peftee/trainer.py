@@ -12,6 +12,7 @@ from torch.nn.utils.rnn import pad_sequence
 from peft import get_peft_model, LoraConfig
 #from torchao.optim import CPUOffloadOptimizer #?
 from .gds_loader import SingleDenseWeightsLoader, DenseWeightsLoader
+from . import modeling
 
 mode = 1 #1-peftee, 2-normal training
 
@@ -33,7 +34,8 @@ class SFTTrainer:
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		assert samples_per_step % (batch_size * (gradient_accumulation_batch_steps if gradient_accumulation_batch_steps else 1)) == 0, "samples_per_step % bs*accumulation_steps must be 0"
 		device = torch.device(device)
-		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
+		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)		
+		modeling.g = g
 
 		# model
 		if mode==2:
@@ -52,7 +54,7 @@ class SFTTrainer:
 				gemma3.g = g
 				model = gemma3.MyGemma3ForCausalLM.from_pretrained(model_dir, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, ignore_mismatched_sizes=True)
 			else:
-				raise ValueError("This model type is not supported")			
+				raise ValueError("This model type is not supported")
 		# ./endOf model
 		
 		# offload		

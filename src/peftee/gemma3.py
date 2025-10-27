@@ -1,61 +1,28 @@
 # gemma3-12B
 import time, os, math, json
-from datetime import datetime
 import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
 from typing import Callable, Optional, Tuple, Union, Dict, Any, Iterable, List, Unpack
-from .utils import _walk_to_parent, _assign_tensor_to_module, _set_meta_placeholder, file_get_contents
+from .modeling import loaderLayer, oModel, oForGeneration
 
 #shared objects
-stats, g = None, None
+g, stats = None, None
 
 #======== rewriting core classes ==============
 from transformers.models.gemma3.modeling_gemma3 import Gemma3MLP, Gemma3DecoderLayer, Gemma3Config, Gemma3Model, Gemma3TextModel, Gemma3ForCausalLM, Gemma3ForConditionalGeneration, Gemma3RMSNorm, create_sliding_window_causal_mask, create_causal_mask, repeat_kv, TransformersKwargs, Cache, BaseModelOutputWithPast, Gemma3ModelOutputWithPast
-
-class loaderLayer: #gemma3 specific
-	def get_base(self, base):
-		if base in g.loader.manifest: return base
-		return "language_model."+base
-
-	def _load_layer_weights(self):
-		t1 = time.perf_counter()
-		base = self.get_base(f"model.layers.{self.layer_idx}.")
-		g.loader.preload_layer_safetensors(base)
-		d = g.loader.load_dict_to_cuda(base)
-		for attr_path, tensor in d.items():
-			parent, leaf = _walk_to_parent(self, attr_path)
-			_assign_tensor_to_module(parent, leaf, tensor)
-		if stats: stats.set("layer_load", t1)
-			
-	def _unload_layer_weights(self):
-		base = self.get_base(f"model.layers.{self.layer_idx}.")
-		for attr_path in g.loader.manifest[base]:
-			parent, leaf = _walk_to_parent(self, attr_path)
-			_set_meta_placeholder(parent, leaf)
-		
 
 class MyGemma3DecoderLayer(Gemma3DecoderLayer, loaderLayer):
 	def __init__(self, config, layer_idx):
 		super().__init__(config, layer_idx)
 		self.layer_idx = layer_idx		
 
-
-class MyGemma3TextModel(Gemma3TextModel):
+class MyGemma3TextModel(Gemma3TextModel, oModel):
 	def __init__(self, config: Gemma3Config):
 		super().__init__(config)
 		self.config = config
-		#common: llama, gemma3
-		self.layers = nn.ModuleList()
-		g.loader.preload_all_safetensors()
-		for layer_idx in range(config.num_hidden_layers):
-			self.layers.append(MyGemma3DecoderLayer(config, layer_idx))
-			if layer_idx >= config.num_hidden_layers-g.trainable_layers_num:
-				self.layers[-1]._load_layer_weights()
-			else:
-				self.layers[-1]._unload_layer_weights()			
-
+		self.ini_layers(MyGemma3DecoderLayer)
 
 	def forward_train(
 		self,
@@ -204,19 +171,6 @@ import transformers.models.gemma3.modeling_gemma3 as modeling
 modeling.Gemma3TextModel = MyGemma3TextModel
 modeling.Gemma3Model = MyGemma3Model
 #===============================================
-
-class oForGeneration:
-	def generate(self, **args):
-		with torch.no_grad():			
-			return super().generate(**args)
-
-	def offload_layers_to_cpu(self, layers_num=2):
-		print(f"offloading layers to CPU {layers_num}/{self.num_hidden_layers}...")
-		for layer_idx in range(min(layers_num, self.num_hidden_layers)):
-			base = f"language_model.model.layers.{layer_idx}."
-			loader.preload_layer_safetensors(base)
-			loader.offload_dict_to_gpu_cpu(base, gpu=False)		
-		print(f"./finished offloading layers to CPU {layers_num}/{self.num_hidden_layers}")
 
 
 class MyGemma3ForCausalLM(Gemma3ForCausalLM, oForGeneration):

@@ -13,7 +13,7 @@ def preprocess(ex):
 
 if __name__=="__main__":
 	mode = 1 #1-train, 2-test
-	model_dir = "/media/mega4alik/ssd/models/gemma3-12B/" #llama3-1B
+	model_dir = "/media/mega4alik/ssd/models/gemma3-270m/" #llama3-1B | gemma3-12B
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
 	tokenizer.truncation_side = 'left'
@@ -46,7 +46,7 @@ if __name__=="__main__":
 			batch_size=1,
 			gradient_accumulation_batch_steps=4,
 			gradient_checkpointing=True,
-			learning_rate=5e-6,
+			learning_rate=5e-5,
 			warmup_steps=100,
 			eval_steps=10,
 			save_steps=10,
