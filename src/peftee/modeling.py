@@ -4,7 +4,7 @@ from torch import nn
 from .utils import _walk_to_parent, _assign_tensor_to_module, _set_meta_placeholder
 
 # shared objects
-g, stats = None, None
+g = None
 
 class loaderLayer:
 	def get_base(self, base):
@@ -19,7 +19,7 @@ class loaderLayer:
 		for attr_path, tensor in d.items():
 			parent, leaf = _walk_to_parent(self, attr_path)
 			_assign_tensor_to_module(parent, leaf, tensor)
-		if stats: stats.set("layer_load", t1)
+		if g.stats: g.stats.set("layer_load", t1)
 			
 	def _unload_layer_weights(self):
 		base = self.get_base(f"model.layers.{self.layer_idx}.")
@@ -42,13 +42,18 @@ class oModel:
 
 class oForGeneration(loaderLayer):
 	def generate(self, **args):
-		with torch.no_grad():			
+		with torch.no_grad():
 			return super().generate(**args)
+	
+	def forward_train(self, **args):
+		return self.model.forward_train(**args)
 
 	def offload_layers_to_cpu(self, layers_num=2):
 		print(f"offloading layers to CPU {layers_num}/{self.num_hidden_layers}...")
 		for layer_idx in range(min(layers_num, self.num_hidden_layers)):
 			base = self.get_base(f"model.layers.{layer_idx}.")
 			g.loader.preload_layer_safetensors(base)
-			g.loader.offload_dict_to_gpu_cpu(base, gpu=False)		
+			g.loader.offload_dict_to_gpu_cpu(base, gpu=False)
 		print(f"./finished offloading layers to CPU {layers_num}/{self.num_hidden_layers}")
+
+	

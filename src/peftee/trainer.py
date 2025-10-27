@@ -34,7 +34,7 @@ class SFTTrainer:
 		assert all(x is not None for x in [model_dir, data_collator, peft_config, samples_per_step, batch_size]), "-- can not be None"
 		assert samples_per_step % (batch_size * (gradient_accumulation_batch_steps if gradient_accumulation_batch_steps else 1)) == 0, "samples_per_step % bs*accumulation_steps must be 0"
 		device = torch.device(device)
-		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)		
+		g = Global(device, trainable_layers_num=trainable_layers_num, sps=samples_per_step, bs=batch_size, gabs=gradient_accumulation_batch_steps)
 		modeling.g = g
 
 		# model

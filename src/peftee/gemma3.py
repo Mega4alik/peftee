@@ -179,6 +179,8 @@ class MyGemma3ForCausalLM(Gemma3ForCausalLM, oForGeneration):
 		self.model.parent_lm_head = self.lm_head #link
 		self.num_hidden_layers = config.num_hidden_layers
 		self.model.num_hidden_layers = config.num_hidden_layers
+		self.model.vocab_size = config.vocab_size		
+		self.model.loss_function = self.loss_function
 
 class MyGemma3ForConditionalGeneration(Gemma3ForConditionalGeneration, oForGeneration):
 	def __init__(self, config):
