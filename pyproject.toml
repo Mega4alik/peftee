@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "peftee"
-version = "0.0.2"
+version = "0.0.3"
 description = "LLM fine-tuning library"
 authors = [
   { name="Anuar Sharafudinov", email="anuarsh@ailabs.us" }

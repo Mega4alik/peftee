@@ -13,7 +13,7 @@ def preprocess(ex):
 
 if __name__=="__main__":
 	mode = 1 #1-train, 2-test
-	model_dir = "/media/mega4alik/ssd/models/llama3-1B/" #llama3-1B | gemma3-270m / 12B
+	model_dir = "/media/mega4alik/ssd/models/gemma3-12B/" #llama3-1B | gemma3-270m / 12B
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
 	tokenizer.truncation_side = 'left'
