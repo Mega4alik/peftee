@@ -28,7 +28,9 @@ Efficient LLM fine-tuning with <i>much less </i> VRAM
 - FlashAttention-2 with online softmax. Full attention matrix is never materialized.
 ---
 
-**Supported model families:** ✅ Llama3, Gemma3 (coming)
+**Supported model families:** 
+- ✅ Llama3 (ex, meta-llama/Meta-Llama-3-8B) 
+- ✅ Gemma3 (ex, google/gemma-3-12b-it)
 
 **Supported GPUs**: NVIDIA, AMD, and Apple Silicon (MacBook).
 
@@ -47,13 +49,11 @@ Install peftee with `pip install peftee` or [from source](https://github.com/Meg
 git clone https://github.com/Mega4alik/peftee.git
 cd peftee
 pip install --no-build-isolation -e .
-
-# for Nvidia GPUs with cuda (optional): 
 ```
 
 ## Usage
 ```bash
-# download the model first. Supported model families: Llama3, Gemma3 (coming)
+# download the model first
 huggingface-cli download "meta-llama/Llama-3.2-1B" --local-dir "./models/Llama-3.2-1B/" --local-dir-use-symlinks False
 ```
 Training sample
@@ -113,17 +113,17 @@ trainer = SFTTrainer(
 trainer.train(resume_from_checkpoint=None) #checkpoint dir
 ```
 
-For **Evaluation/Inference**, we will be using oLLM, LLM inference library 
+For **Evaluation/Inference**, we will be using [oLLM](https://github.com/Mega4alik/ollm), LLM inference library
 
 ```bash
-# Install ollm. Source: https://github.com/Mega4alik/ollm
+# Install ollm
 pip install --no-build-isolation ollm
 ``` 
 
 ```python
 from ollm import AutoInference
 data_collator = DefaultDataCollator(tokenizer, is_eval=True, logging=False)
-o = AutoInference(model_dir, adapter_dir="./mymodel/checkpoint-20/", device="cuda:0")
+o = AutoInference(model_dir, adapter_dir="./mymodel/checkpoint-20/", device="cuda:0", logging=False)
 text_streamer = TextStreamer(o.tokenizer, skip_prompt=True, skip_special_tokens=False)
 test_ds = DataLoader(test_dataset, batch_size=1, shuffle=True)
 for sample in test_ds:
@@ -133,4 +133,5 @@ for sample in test_ds:
 	print(answer)
 ```
 ## Contact us
-If you have any questions, contact me at anuarsh@ailabs.us. 
+If there’s a model you’d like to see supported, feel free to suggest it in the [discussion](https://github.com/Mega4alik/peftee/discussions/1) — I’ll do my best to make it happen.
+

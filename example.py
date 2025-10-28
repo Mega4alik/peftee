@@ -13,7 +13,7 @@ def preprocess(ex):
 
 if __name__=="__main__":
 	mode = 1 #1-train, 2-test
-	model_dir = "/media/mega4alik/ssd/models/llama3-1B/"
+	model_dir = "/media/mega4alik/ssd/models/gemma3-12B/" #llama3-1B | gemma3-270m / 12B
 	tokenizer = AutoTokenizer.from_pretrained(model_dir)
 	tokenizer.pad_token = tokenizer.eos_token
 	tokenizer.truncation_side = 'left'
@@ -21,7 +21,7 @@ if __name__=="__main__":
 	dataset = load_dataset("EdinburghNLP/xsum")
 	dataset = dataset.map(preprocess, batched=False)
 	dataset = dataset.filter(lambda x: len(x["prompt"]) + len(x["completion"]) < 1000*5) #1500*5
-	dataset = dataset["train"].train_test_split(test_size=0.06, seed=42)
+	dataset = dataset["train"].train_test_split(test_size=64, seed=42)
 	train_dataset, test_dataset = dataset["train"], dataset["test"]
 	print("Dataset train, test sizes:", len(train_dataset), len(test_dataset))
 
@@ -42,12 +42,12 @@ if __name__=="__main__":
 			offload_cpu_layers_num=0, #99 for maximum offload to CPU
 			peft_config=peft_config,
 			epochs=1,
-			samples_per_step=100, #100-500, depending on available RAM
+			samples_per_step=128, #100-500, depending on available RAM
 			batch_size=1,
 			gradient_accumulation_batch_steps=4,
 			gradient_checkpointing=True,
-			learning_rate=5e-6,
-			warmup_steps=1000,
+			learning_rate=2e-4,#5e-5,
+			warmup_steps=10,
 			eval_steps=10,
 			save_steps=10,
 			data_collator=data_collator,

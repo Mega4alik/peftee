@@ -9,29 +9,13 @@ from typing import Callable, Optional, Tuple, Union, Dict, Any, Iterable, List, 
 from torch.cuda.amp import autocast
 
 from .utils import _walk_to_parent, _assign_tensor_to_module, _set_meta_placeholder 
+from .modeling import loaderLayer, oModel, oForGeneration
 
 #shared objects
 g = None
 
 #======== rewriting core classes ==============
 from transformers.models.llama.modeling_llama import LlamaForCausalLM, apply_rotary_pos_emb, eager_attention_forward, LlamaAttention, LlamaMLP, LlamaDecoderLayer, LlamaModel, LlamaConfig, create_causal_mask, BaseModelOutputWithPast, CausalLMOutputWithPast, TransformersKwargs, Cache
-
-class loaderLayer:
-	def _load_layer_weights(self):
-		t1 = time.perf_counter()
-		base = f"model.layers.{self.layer_idx}."		
-		d = g.loader.load_dict_to_cuda(base)
-		for attr_path, tensor in d.items():
-			parent, leaf = _walk_to_parent(self, attr_path)
-			_assign_tensor_to_module(parent, leaf, tensor)
-		if g.stats: g.stats.set("layer_load", t1)
-			
-	def _unload_layer_weights(self):
-		base = f"model.layers.{self.layer_idx}."
-		for attr_path in g.loader.manifest[base]:
-			parent, leaf = _walk_to_parent(self, attr_path)
-			_set_meta_placeholder(parent, leaf)
-
 
 class MyLlamaMLP(LlamaMLP):
 	def forward(self, x): #down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -45,25 +29,16 @@ class MyLlamaMLP(LlamaMLP):
 		down_proj = torch.cat(chunks, dim=0).unsqueeze(0) #T,C->1,T,C
 		return down_proj
 
-
 class MyLlamaDecoderLayer(LlamaDecoderLayer, loaderLayer):
 	def __init__(self, config: LlamaConfig, layer_idx: int):
 		self.layer_idx = layer_idx
 		super().__init__(config, layer_idx)
 
-
-class MyLlamaModel(LlamaModel):
+class MyLlamaModel(LlamaModel, oModel):
 	def __init__(self, config):
-		super().__init__(config)		
-		self.layers = nn.ModuleList()
-		g.loader.preload_all_safetensors()
-		for layer_idx in range(config.num_hidden_layers):
-			self.layers.append(MyLlamaDecoderLayer(config, layer_idx))
-			if layer_idx >= config.num_hidden_layers-g.trainable_layers_num:
-				self.layers[-1]._load_layer_weights()
-			else:
-				self.layers[-1]._unload_layer_weights()
-
+		super().__init__(config)
+		self.ini_layers(MyLlamaDecoderLayer)
+		
 	def forward_train(
 		self,
 		input_ids: Optional[torch.LongTensor] = None,
@@ -178,7 +153,7 @@ llama_modeling.LlamaModel = MyLlamaModel
 #===============================================
 
 
-class MyLlamaForCausalLM(LlamaForCausalLM):
+class MyLlamaForCausalLM(LlamaForCausalLM, oForGeneration):
 	def __init__(self, config):
 		super().__init__(config)
 		self.num_hidden_layers = config.num_hidden_layers
@@ -186,14 +161,3 @@ class MyLlamaForCausalLM(LlamaForCausalLM):
 		self.model.vocab_size = config.vocab_size
 		self.model.parent_lm_head = self.lm_head #link
 		self.model.loss_function = self.loss_function
-
-	def offload_layers_to_cpu(self, layers_num=2):
-		print(f"offloading layers to CPU {layers_num}/{self.num_hidden_layers}...")
-		for layer_idx in range(min(layers_num, self.num_hidden_layers)):
-			base = f"model.layers.{layer_idx}."
-			g.loader.preload_layer_safetensors(base)
-			g.loader.offload_dict_to_gpu_cpu(base, gpu=False)		
-		print(f"./finished offloading layers to CPU {layers_num}/{self.num_hidden_layers}")
-
-	def forward_train(self, **args):
-		return self.model.forward_train(**args)
